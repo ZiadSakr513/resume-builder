@@ -34,6 +34,13 @@ function newItem(): ResumeSectionItem {
   };
 }
 
+function cleanPdfTitle(value: string) {
+  return value
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]+/g, "")
+    .replace(/\s+/g, " ") || "resume";
+}
+
 export function ResumeEditor({
   initialTitle,
   initialTemplate,
@@ -71,7 +78,19 @@ export function ResumeEditor({
   }
 
   function exportPdf() {
+    const previousTitle = document.title;
+    const pdfTitle = cleanPdfTitle(title);
+
+    document.title = `${pdfTitle}.pdf`;
+
+    const restoreTitle = () => {
+      document.title = previousTitle;
+      window.removeEventListener("afterprint", restoreTitle);
+    };
+
+    window.addEventListener("afterprint", restoreTitle);
     window.print();
+    window.setTimeout(restoreTitle, 1000);
   }
 
   return (
