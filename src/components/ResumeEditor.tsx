@@ -77,6 +77,15 @@ export function ResumeEditor({
     }
 
     setIsExporting(true);
+    const pdfWindow = window.open("", "_blank");
+
+    if (!pdfWindow) {
+      window.alert("Please allow pop-ups for this site so the PDF preview can open.");
+      setIsExporting(false);
+      return;
+    }
+
+    pdfWindow.document.write("<p style='font-family: system-ui; padding: 24px;'>Preparing PDF preview...</p>");
     try {
       const { jsPDF } = await import("jspdf");
       const pdf = new jsPDF({
@@ -255,10 +264,11 @@ export function ResumeEditor({
       sectionTitle("Education", margin, contentWidth);
       content.education.forEach((item) => itemBlock(item, margin, contentWidth));
 
-      const safeTitle = title.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "resume";
-      pdf.save(`${safeTitle}.pdf`);
+      const blobUrl = pdf.output("bloburl");
+      pdfWindow.location.href = blobUrl.toString();
     } catch (error) {
       console.error(error);
+      pdfWindow.close();
       window.alert("PDF export failed. Please try again.");
     } finally {
       setIsExporting(false);
