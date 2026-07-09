@@ -10,7 +10,10 @@ export default function Home() {
           <span className="grid size-9 place-items-center rounded-md bg-teal-700 text-white">
             <FileText size={18} />
           </span>
-          CVForge
+          <span>
+            CVForge
+            <span className="block text-xs font-semibold text-slate-500">Founded by Ziad Sakr</span>
+          </span>
         </Link>
         <div className="flex items-center gap-2">
           <ButtonLink href="/builder">Open builder</ButtonLink>
@@ -115,6 +118,13 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      <footer className="border-t border-slate-200 bg-white/60">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5 text-sm text-slate-600">
+          <p>CVForge</p>
+          <p className="font-semibold text-slate-800">Founded by Ziad Sakr</p>
+        </div>
+      </footer>
     </main>
   );
 }
