@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Printer, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/Button";
 import { ResumePreview } from "@/components/ResumePreview";
 import type { ResumeContent, ResumeSectionItem, ResumeTemplate } from "@/lib/resume";
@@ -43,6 +43,8 @@ export function ResumeEditor({
   const [template, setTemplate] = useState<ResumeTemplate>(initialTemplate);
   const [content, setContent] = useState(initialContent);
   const [activeView, setActiveView] = useState<"editor" | "preview">("editor");
+  const [isExporting, setIsExporting] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const sectionKeys = useMemo<SectionKey[]>(() => ["experience", "projects", "education"], []);
 
@@ -70,6 +72,74 @@ export function ResumeEditor({
     }));
   }
 
+  async function exportPdf() {
+    if (!previewRef.current || isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const [{ default: html2canvas }, { jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+      const canvas = await html2canvas(previewRef.current, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+      });
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "pt",
+        format: "letter",
+      });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const imageWidth = pageWidth - margin * 2;
+      const imageHeight = (canvas.height * imageWidth) / canvas.width;
+      let remainingHeight = imageHeight;
+      let sourceY = 0;
+
+      while (remainingHeight > 0) {
+        const pageCanvas = document.createElement("canvas");
+        const pageContentHeight = Math.min(
+          canvas.height - sourceY,
+          ((pageHeight - margin * 2) * canvas.width) / imageWidth,
+        );
+
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = pageContentHeight;
+        const context = pageCanvas.getContext("2d");
+        context?.drawImage(
+          canvas,
+          0,
+          sourceY,
+          canvas.width,
+          pageContentHeight,
+          0,
+          0,
+          canvas.width,
+          pageContentHeight,
+        );
+
+        const pageImageHeight = (pageContentHeight * imageWidth) / canvas.width;
+        if (sourceY > 0) {
+          pdf.addPage();
+        }
+        pdf.addImage(pageCanvas.toDataURL("image/png"), "PNG", margin, margin, imageWidth, pageImageHeight);
+
+        sourceY += pageContentHeight;
+        remainingHeight -= pageImageHeight;
+      }
+
+      const safeTitle = title.trim().replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "") || "resume";
+      pdf.save(`${safeTitle}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#f7f4ef]">
       <header className="no-print sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -83,9 +153,9 @@ export function ResumeEditor({
             <Button className="md:hidden" onClick={() => setActiveView(activeView === "editor" ? "preview" : "editor")} variant="secondary">
               {activeView === "editor" ? "Preview" : "Editor"}
             </Button>
-            <Button onClick={() => window.print()} variant="secondary">
+            <Button disabled={isExporting} onClick={exportPdf} variant="secondary">
               <Printer size={16} />
-              PDF
+              {isExporting ? "Exporting" : "PDF"}
             </Button>
           </div>
           <p className="w-full text-right text-sm font-medium text-slate-500">
@@ -207,7 +277,9 @@ export function ResumeEditor({
         </section>
 
         <section className={cn("print-preview", activeView === "editor" && "hidden md:block")}>
-          <ResumePreview content={content} template={template} />
+          <div ref={previewRef}>
+            <ResumePreview content={content} template={template} />
+          </div>
         </section>
       </main>
     </div>
