@@ -11,7 +11,10 @@ export default function DashboardPage() {
             <span className="grid size-9 place-items-center rounded-md bg-teal-700 text-white">
               <FileText size={18} />
             </span>
-            CVForge
+            <span>
+              CVForge
+              <span className="block text-xs font-semibold text-slate-500">Founded by Ziad Sakr</span>
+            </span>
           </Link>
           <ButtonLink href="/builder">
             Start builder
