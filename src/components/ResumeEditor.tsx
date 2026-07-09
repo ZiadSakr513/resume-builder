@@ -206,7 +206,7 @@ export function ResumeEditor({
           ))}
         </section>
 
-        <section className={cn(activeView === "editor" && "hidden md:block")}>
+        <section className={cn("print-preview", activeView === "editor" && "hidden md:block")}>
           <ResumePreview content={content} template={template} />
         </section>
       </main>
