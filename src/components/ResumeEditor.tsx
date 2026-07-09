@@ -1,7 +1,7 @@
 "use client";
 
-import { Plus, Printer, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { Download, Plus, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { Button } from "@/components/Button";
 import { ResumePreview } from "@/components/ResumePreview";
 import type { ResumeContent, ResumeSectionItem, ResumeTemplate } from "@/lib/resume";
@@ -50,12 +50,10 @@ export function ResumeEditor({
   const [template, setTemplate] = useState<ResumeTemplate>(initialTemplate);
   const [content, setContent] = useState(initialContent);
   const [activeView, setActiveView] = useState<"editor" | "preview">("editor");
+  const [isExporting, setIsExporting] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
 
   const sectionKeys = useMemo<SectionKey[]>(() => ["experience", "projects", "education"], []);
-
-  useEffect(() => {
-    document.title = cleanPdfTitle(title);
-  }, [title]);
 
   function updateField(field: keyof ResumeContent, value: string) {
     setContent((current) => ({ ...current, [field]: value }));
@@ -81,9 +79,59 @@ export function ResumeEditor({
     }));
   }
 
-  function exportPdf() {
-    document.title = cleanPdfTitle(title);
-    window.print();
+  async function exportPdf() {
+    if (!previewRef.current || isExporting) {
+      return;
+    }
+
+    setIsExporting(true);
+
+    try {
+      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
+        import("html2canvas"),
+        import("jspdf"),
+      ]);
+
+      const resume = previewRef.current.querySelector(".print-area") as HTMLElement | null;
+
+      if (!resume) {
+        return;
+      }
+
+      const canvas = await html2canvas(resume, {
+        backgroundColor: "#ffffff",
+        scale: Math.min(window.devicePixelRatio || 1, 2),
+        useCORS: true,
+      });
+      const pdf = new jsPDF({ format: "letter", orientation: "portrait", unit: "pt" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 24;
+      const imageWidth = pageWidth - margin * 2;
+      const imageHeight = (canvas.height * imageWidth) / canvas.width;
+      const printableHeight = pageHeight - margin * 2;
+      const imageData = canvas.toDataURL("image/png");
+      let remainingHeight = imageHeight;
+      let y = margin;
+
+      pdf.setProperties({
+        title: cleanPdfTitle(title),
+        creator: "CVForge",
+      });
+      pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight);
+      remainingHeight -= printableHeight;
+
+      while (remainingHeight > 0) {
+        y -= printableHeight;
+        pdf.addPage();
+        pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight);
+        remainingHeight -= printableHeight;
+      }
+
+      pdf.save(`${cleanPdfTitle(title)}.pdf`);
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   return (
@@ -99,9 +147,9 @@ export function ResumeEditor({
             <Button className="md:hidden" onClick={() => setActiveView(activeView === "editor" ? "preview" : "editor")} variant="secondary">
               {activeView === "editor" ? "Preview" : "Editor"}
             </Button>
-            <Button onClick={exportPdf} variant="secondary">
-              <Printer size={16} />
-              PDF
+            <Button disabled={isExporting} onClick={exportPdf} variant="secondary">
+              <Download size={16} />
+              {isExporting ? "Making PDF" : "PDF"}
             </Button>
           </div>
           <p className="w-full text-right text-sm font-medium text-slate-500">
@@ -222,7 +270,7 @@ export function ResumeEditor({
           ))}
         </section>
 
-        <section className={cn("print-preview", activeView === "editor" && "hidden md:block")}>
+        <section className={cn("print-preview", activeView === "editor" && "hidden md:block")} ref={previewRef}>
           <ResumePreview content={content} template={template} />
         </section>
       </main>
