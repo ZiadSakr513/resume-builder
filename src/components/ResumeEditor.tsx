@@ -92,8 +92,11 @@ export function ResumeEditor({
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
       const margin = 54;
-      const maxWidth = pageWidth - margin * 2;
-      let y = margin;
+      const gap = 34;
+      const sidebarWidth = 190;
+      const mainX = margin + sidebarWidth + gap;
+      const mainWidth = pageWidth - margin - mainX;
+      const fullWidth = pageWidth - margin * 2;
 
       const colors = {
         accent: template === "modern" ? "#0f766e" : template === "minimal" ? "#78716c" : "#1e3a5f",
@@ -102,105 +105,149 @@ export function ResumeEditor({
         title: "#020617",
       };
 
-      const ensureSpace = (height: number) => {
-        if (y + height > pageHeight - margin) {
+      const cursor = { y: margin };
+      const sidebar = { y: margin };
+      const main = { y: margin };
+
+      const ensureSpace = (target: { y: number }, height: number) => {
+        if (target.y + height > pageHeight - margin) {
           pdf.addPage();
-          y = margin;
+          target.y = margin;
         }
       };
 
-      const writeWrapped = (text: string, size: number, color: string, gap = 14, width = maxWidth) => {
+      const writeWrapped = (
+        text: string,
+        target: { y: number },
+        x: number,
+        width: number,
+        size: number,
+        color: string,
+        lineGap = 14,
+        font: "normal" | "bold" = "normal",
+      ) => {
         if (!text.trim()) {
           return;
         }
 
-        pdf.setFont("helvetica", "normal");
+        pdf.setFont("helvetica", font);
         pdf.setFontSize(size);
         pdf.setTextColor(color);
 
         const lines = pdf.splitTextToSize(text.trim(), width) as string[];
-        ensureSpace(lines.length * gap + 6);
-        pdf.text(lines, margin, y);
-        y += lines.length * gap + 8;
+        ensureSpace(target, lines.length * lineGap + 6);
+        pdf.text(lines, x, target.y);
+        target.y += lines.length * lineGap + 8;
       };
 
-      const section = (label: string) => {
-        ensureSpace(34);
-        y += 12;
+      const section = (label: string, target: { y: number }, x: number, width: number) => {
+        ensureSpace(target, 34);
+        target.y += 12;
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(10);
         pdf.setTextColor(colors.accent);
-        pdf.text(label.toUpperCase(), margin, y);
-        y += 8;
+        pdf.text(label.toUpperCase(), x, target.y);
+        target.y += 8;
         pdf.setDrawColor(colors.accent);
         pdf.setLineWidth(0.5);
-        pdf.line(margin, y, pageWidth - margin, y);
-        y += 18;
+        pdf.line(x, target.y, x + width, target.y);
+        target.y += 18;
       };
 
-      const item = (entry: ResumeSectionItem) => {
-        ensureSpace(70);
+      const item = (entry: ResumeSectionItem, target: { y: number }, x: number, width: number) => {
+        ensureSpace(target, 70);
         pdf.setFont("helvetica", "bold");
         pdf.setFontSize(12);
         pdf.setTextColor(colors.title);
-        pdf.text(entry.title || "Untitled", margin, y);
+        pdf.text(entry.title || "Untitled", x, target.y);
 
         const dates = [entry.start, entry.end].filter(Boolean).join(" - ");
         if (dates) {
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(10);
           pdf.setTextColor(colors.muted);
-          pdf.text(dates, pageWidth - margin, y, { align: "right" });
+          pdf.text(dates, x + width, target.y, { align: "right" });
         }
 
-        y += 15;
+        target.y += 15;
         if (entry.subtitle || entry.location) {
           pdf.setFont("helvetica", "normal");
           pdf.setFontSize(10);
           pdf.setTextColor(colors.muted);
-          pdf.text([entry.subtitle, entry.location].filter(Boolean).join(" | "), margin, y);
-          y += 15;
+          pdf.text([entry.subtitle, entry.location].filter(Boolean).join(" | "), x, target.y);
+          target.y += 15;
         }
 
-        writeWrapped(entry.description, 10, colors.body, 13);
-        y += 6;
+        writeWrapped(entry.description, target, x, width, 10, colors.body, 13);
+        target.y += 6;
       };
 
       pdf.setProperties({ title: pdfTitle, creator: "CVForge" });
       pdf.setFont("helvetica", template === "minimal" ? "normal" : "bold");
       pdf.setFontSize(template === "minimal" ? 30 : 34);
       pdf.setTextColor(colors.title);
-      pdf.text(content.fullName || "Your Name", margin, y);
-      y += 26;
+      pdf.text(content.fullName || "Your Name", margin, cursor.y);
+      cursor.y += 26;
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(15);
       pdf.setTextColor(colors.accent);
-      pdf.text(content.headline || "Professional headline", margin, y);
-      y += 28;
+      pdf.text(content.headline || "Professional headline", margin, cursor.y);
+      cursor.y += 28;
 
       const contact = [content.email, content.phone, content.location, content.website].filter(Boolean).join("  |  ");
-      writeWrapped(contact, 10, colors.muted, 13);
+      writeWrapped(contact, cursor, margin, fullWidth, 10, colors.muted, 13);
 
-      section("Profile");
-      writeWrapped(content.summary, 10, colors.body, 14);
+      const contentTop = cursor.y + 14;
 
-      section("Skills");
-      writeWrapped(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean).join("  |  "), 10, colors.body, 14);
+      if (template === "minimal") {
+        section("Profile", cursor, margin, fullWidth);
+        writeWrapped(content.summary, cursor, margin, fullWidth, 10, colors.body, 14);
 
-      if (content.links.length) {
-        section("Links");
-        content.links.forEach((link) => writeWrapped(`${link.label}: ${link.url}`, 10, colors.body, 14));
+        section("Skills", cursor, margin, fullWidth);
+        writeWrapped(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean).join("  |  "), cursor, margin, fullWidth, 10, colors.body, 14);
+
+        if (content.links.length) {
+          section("Links", cursor, margin, fullWidth);
+          content.links.forEach((link) => writeWrapped(`${link.label}: ${link.url}`, cursor, margin, fullWidth, 10, colors.body, 14));
+        }
+
+        section("Experience", cursor, margin, fullWidth);
+        content.experience.forEach((entry) => item(entry, cursor, margin, fullWidth));
+
+        section("Projects", cursor, margin, fullWidth);
+        content.projects.forEach((entry) => item(entry, cursor, margin, fullWidth));
+
+        section("Education", cursor, margin, fullWidth);
+        content.education.forEach((entry) => item(entry, cursor, margin, fullWidth));
+      } else {
+        sidebar.y = contentTop;
+        main.y = contentTop;
+
+        section("Profile", sidebar, margin, sidebarWidth);
+        writeWrapped(content.summary, sidebar, margin, sidebarWidth, 10, colors.body, 14);
+
+        section("Skills", sidebar, margin, sidebarWidth);
+        content.skills
+          .split(",")
+          .map((skill) => skill.trim())
+          .filter(Boolean)
+          .forEach((skill) => writeWrapped(skill, sidebar, margin, sidebarWidth, 10, colors.body, 14));
+
+        if (content.links.length) {
+          section("Links", sidebar, margin, sidebarWidth);
+          content.links.forEach((link) => writeWrapped(`${link.label}: ${link.url}`, sidebar, margin, sidebarWidth, 10, colors.body, 14));
+        }
+
+        section("Experience", main, mainX, mainWidth);
+        content.experience.forEach((entry) => item(entry, main, mainX, mainWidth));
+
+        section("Projects", main, mainX, mainWidth);
+        content.projects.forEach((entry) => item(entry, main, mainX, mainWidth));
+
+        section("Education", main, mainX, mainWidth);
+        content.education.forEach((entry) => item(entry, main, mainX, mainWidth));
       }
-
-      section("Experience");
-      content.experience.forEach(item);
-
-      section("Projects");
-      content.projects.forEach(item);
-
-      section("Education");
-      content.education.forEach(item);
 
       pdf.save(`${pdfTitle}.pdf`);
     } finally {
