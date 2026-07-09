@@ -186,9 +186,21 @@ export function ResumePreview({ content, template }: ResumePreviewProps) {
             <div className="space-y-6">
               {content.projects.map((item) => (
                 <div key={item.id}>
-                  <h4 className={cn("font-bold", isMinimal && "text-lg font-semibold text-stone-950")}>
-                    {item.title || "Project title"}
-                  </h4>
+                  <div className="flex flex-wrap justify-between gap-x-6 gap-y-2">
+                    <div>
+                      <h4 className={cn("font-bold", isMinimal && "text-lg font-semibold text-stone-950")}>
+                        {item.title || "Project title"}
+                      </h4>
+                      {item.subtitle || item.location ? (
+                        <p className={cn("mt-1 text-sm font-medium text-slate-600", isMinimal && "text-stone-500")}>
+                          {[item.subtitle, item.location].filter(Boolean).join(" | ")}
+                        </p>
+                      ) : null}
+                    </div>
+                    <p className={cn("text-sm text-slate-500", isMinimal && "font-sans text-xs uppercase tracking-[0.18em]")}>
+                      {[item.start, item.end].filter(Boolean).join(" - ")}
+                    </p>
+                  </div>
                   <p className={cn("mt-2 text-sm leading-7 text-slate-700", isMinimal && "text-base leading-8 text-stone-700")}>
                     {item.description}
                   </p>

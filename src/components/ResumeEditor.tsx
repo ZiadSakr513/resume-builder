@@ -140,6 +140,41 @@ export function ResumeEditor({
         target.y += lines.length * lineGap + 8;
       };
 
+      const skillPills = (skills: string[], target: { y: number }, x: number, width: number) => {
+        let pillX = x;
+        const pillGap = 7;
+        const rowGap = 10;
+        const pillHeight = 19;
+
+        skills.forEach((skill) => {
+          const label = skill.trim();
+
+          if (!label) {
+            return;
+          }
+
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(9);
+
+          const pillWidth = Math.min(pdf.getTextWidth(label) + 18, width);
+
+          if (pillX > x && pillX + pillWidth > x + width) {
+            pillX = x;
+            target.y += pillHeight + rowGap;
+          }
+
+          ensureSpace(target, pillHeight + rowGap);
+          pdf.setFillColor(template === "minimal" ? "#ffffff" : "#f1f5f9");
+          pdf.setDrawColor(template === "minimal" ? "#d6d3d1" : "#f1f5f9");
+          pdf.roundedRect(pillX, target.y - 12, pillWidth, pillHeight, template === "minimal" ? 0 : 4, template === "minimal" ? 0 : 4, "FD");
+          pdf.setTextColor(colors.body);
+          pdf.text(label, pillX + 9, target.y + 1);
+          pillX += pillWidth + pillGap;
+        });
+
+        target.y += pillHeight + 8;
+      };
+
       const section = (label: string, target: { y: number }, x: number, width: number) => {
         ensureSpace(target, 34);
         target.y += 12;
@@ -205,7 +240,7 @@ export function ResumeEditor({
         writeWrapped(content.summary, cursor, margin, fullWidth, 10, colors.body, 14);
 
         section("Skills", cursor, margin, fullWidth);
-        writeWrapped(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean).join("  |  "), cursor, margin, fullWidth, 10, colors.body, 14);
+        skillPills(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean), cursor, margin, fullWidth);
 
         if (content.links.length) {
           section("Links", cursor, margin, fullWidth);
@@ -228,11 +263,7 @@ export function ResumeEditor({
         writeWrapped(content.summary, sidebar, margin, sidebarWidth, 10, colors.body, 14);
 
         section("Skills", sidebar, margin, sidebarWidth);
-        content.skills
-          .split(",")
-          .map((skill) => skill.trim())
-          .filter(Boolean)
-          .forEach((skill) => writeWrapped(skill, sidebar, margin, sidebarWidth, 10, colors.body, 14));
+        skillPills(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean), sidebar, margin, sidebarWidth);
 
         if (content.links.length) {
           section("Links", sidebar, margin, sidebarWidth);
