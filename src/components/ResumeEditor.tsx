@@ -43,7 +43,6 @@ export function ResumeEditor({
   const [template, setTemplate] = useState<ResumeTemplate>(initialTemplate);
   const [content, setContent] = useState(initialContent);
   const [activeView, setActiveView] = useState<"editor" | "preview">("editor");
-  const [isExporting, setIsExporting] = useState(false);
 
   const sectionKeys = useMemo<SectionKey[]>(() => ["experience", "projects", "education"], []);
 
@@ -71,208 +70,8 @@ export function ResumeEditor({
     }));
   }
 
-  async function exportPdf() {
-    if (isExporting) {
-      return;
-    }
-
-    setIsExporting(true);
-    const pdfWindow = window.open("", "_blank");
-
-    if (!pdfWindow) {
-      window.alert("Please allow pop-ups for this site so the PDF preview can open.");
-      setIsExporting(false);
-      return;
-    }
-
-    pdfWindow.document.write("<p style='font-family: system-ui; padding: 24px;'>Preparing PDF preview...</p>");
-    try {
-      const { jsPDF } = await import("jspdf");
-      const pdf = new jsPDF({
-        orientation: "portrait",
-        unit: "pt",
-        format: "letter",
-      });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 46;
-      const isModern = template === "modern";
-      const isMinimal = template === "minimal";
-      const bodyFont = isMinimal ? "times" : "helvetica";
-      const accent: [number, number, number] = isModern ? [15, 118, 110] : [0, 105, 92];
-      let y = margin;
-
-      function setText(color: [number, number, number]) {
-        pdf.setTextColor(color[0], color[1], color[2]);
-      }
-
-      function ensureSpace(height: number) {
-        if (y + height > pageHeight - margin) {
-          pdf.addPage();
-          y = margin;
-        }
-      }
-
-      function writeText(
-        text: string,
-        x: number,
-        width: number,
-        options: {
-          color?: [number, number, number];
-          font?: string;
-          lineHeight?: number;
-          size?: number;
-          style?: "normal" | "bold";
-        } = {},
-      ) {
-        if (!text.trim()) {
-          return;
-        }
-        const size = options.size ?? 10;
-        const lineHeight = options.lineHeight ?? size + 5;
-        pdf.setFont(options.font ?? bodyFont, options.style ?? "normal");
-        pdf.setFontSize(size);
-        setText(options.color ?? [31, 41, 55]);
-        const lines = pdf.splitTextToSize(text, width);
-        ensureSpace(lines.length * lineHeight + 4);
-        pdf.text(lines, x, y);
-        y += lines.length * lineHeight;
-      }
-
-      function sectionTitle(label: string, x: number, width: number) {
-        ensureSpace(28);
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(9);
-        setText(isMinimal ? [110, 98, 83] : [30, 64, 104]);
-        pdf.text(label.toUpperCase(), x, y);
-        if (!isMinimal) {
-          pdf.setDrawColor(203, 213, 225);
-          pdf.line(x, y + 8, x + width, y + 8);
-        }
-        y += 24;
-      }
-
-      function itemBlock(item: ResumeSectionItem, x: number, width: number) {
-        ensureSpace(55);
-        pdf.setFont(bodyFont, "bold");
-        pdf.setFontSize(12);
-        setText([2, 6, 23]);
-        pdf.text(item.title || "Title", x, y);
-        const date = [item.start, item.end].filter(Boolean).join(" - ");
-        if (date) {
-          pdf.setFont(bodyFont, "normal");
-          pdf.setFontSize(9);
-          setText([71, 85, 105]);
-          pdf.text(date, x + width, y, { align: "right" });
-        }
-        y += 15;
-        writeText(item.subtitle || "Organization", x, width, {
-          color: [71, 85, 105],
-          size: 10,
-          lineHeight: 13,
-        });
-        if (item.description) {
-          y += 3;
-          writeText(item.description, x, width, { size: 10, lineHeight: 15 });
-        }
-        y += 8;
-      }
-
-      if (isModern) {
-        pdf.setFillColor(15, 23, 42);
-        pdf.rect(0, 0, pageWidth, 128, "F");
-        setText([255, 255, 255]);
-        pdf.setFont("helvetica", "bold");
-        pdf.setFontSize(28);
-        pdf.text(content.fullName || "Your Name", margin, 56);
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(14);
-        setText([204, 251, 241]);
-        pdf.text(content.headline || "Professional headline", margin, 80);
-        pdf.setFontSize(9);
-        setText([226, 232, 240]);
-        pdf.text(
-          [content.email, content.phone, content.location, content.website].filter(Boolean).join("  |  "),
-          margin,
-          106,
-        );
-        y = 166;
-      } else {
-        pdf.setFont(isMinimal ? "times" : "helvetica", isMinimal ? "normal" : "bold");
-        pdf.setFontSize(isMinimal ? 32 : 30);
-        setText([2, 6, 23]);
-        pdf.text(content.fullName || "Your Name", isMinimal ? pageWidth / 2 : margin, y, {
-          align: isMinimal ? "center" : "left",
-        });
-        y += isMinimal ? 24 : 27;
-        pdf.setFont(bodyFont, "normal");
-        pdf.setFontSize(isMinimal ? 11 : 14);
-        setText(isMinimal ? [120, 113, 108] : accent);
-        pdf.text(content.headline || "Professional headline", isMinimal ? pageWidth / 2 : margin, y, {
-          align: isMinimal ? "center" : "left",
-        });
-        y += 28;
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9);
-        setText([71, 85, 105]);
-        pdf.text(
-          [content.email, content.phone, content.location, content.website].filter(Boolean).join("  |  "),
-          isMinimal ? pageWidth / 2 : margin,
-          y,
-          { align: isMinimal ? "center" : "left" },
-        );
-        y += isMinimal ? 42 : 34;
-      }
-
-      const contentWidth = pageWidth - margin * 2;
-      sectionTitle("Profile", margin, contentWidth);
-      writeText(
-        content.summary || "Write a concise summary that captures your strengths and direction.",
-        margin,
-        contentWidth,
-        { size: isMinimal ? 11 : 10, lineHeight: isMinimal ? 17 : 15 },
-      );
-      y += 12;
-
-      sectionTitle("Skills", margin, contentWidth);
-      writeText(
-        (content.skills || "Leadership, Communication, Strategy")
-          .split(",")
-          .map((skill) => skill.trim())
-          .filter(Boolean)
-          .join("  |  "),
-        margin,
-        contentWidth,
-        { size: 10, lineHeight: 15 },
-      );
-      y += 12;
-
-      if (content.links.length) {
-        sectionTitle("Links", margin, contentWidth);
-        content.links.forEach((link) => {
-          writeText(`${link.label}: ${link.url}`, margin, contentWidth, { size: 10, lineHeight: 15 });
-        });
-        y += 12;
-      }
-
-      sectionTitle("Experience", margin, contentWidth);
-      content.experience.forEach((item) => itemBlock(item, margin, contentWidth));
-
-      sectionTitle("Projects", margin, contentWidth);
-      content.projects.forEach((item) => itemBlock(item, margin, contentWidth));
-
-      sectionTitle("Education", margin, contentWidth);
-      content.education.forEach((item) => itemBlock(item, margin, contentWidth));
-
-      const blobUrl = pdf.output("bloburl");
-      pdfWindow.location.href = blobUrl.toString();
-    } catch (error) {
-      console.error(error);
-      pdfWindow.close();
-      window.alert("PDF export failed. Please try again.");
-    } finally {
-      setIsExporting(false);
-    }
+  function exportPdf() {
+    window.print();
   }
 
   return (
@@ -288,9 +87,9 @@ export function ResumeEditor({
             <Button className="md:hidden" onClick={() => setActiveView(activeView === "editor" ? "preview" : "editor")} variant="secondary">
               {activeView === "editor" ? "Preview" : "Editor"}
             </Button>
-            <Button disabled={isExporting} onClick={exportPdf} variant="secondary">
+            <Button onClick={exportPdf} variant="secondary">
               <Printer size={16} />
-              {isExporting ? "Exporting" : "PDF"}
+              PDF
             </Button>
           </div>
           <p className="w-full text-right text-sm font-medium text-slate-500">
