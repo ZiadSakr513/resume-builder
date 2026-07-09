@@ -1,7 +1,7 @@
 "use client";
 
 import { Plus, Printer, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { ResumePreview } from "@/components/ResumePreview";
 import type { ResumeContent, ResumeSectionItem, ResumeTemplate } from "@/lib/resume";
@@ -53,6 +53,10 @@ export function ResumeEditor({
 
   const sectionKeys = useMemo<SectionKey[]>(() => ["experience", "projects", "education"], []);
 
+  useEffect(() => {
+    document.title = cleanPdfTitle(title);
+  }, [title]);
+
   function updateField(field: keyof ResumeContent, value: string) {
     setContent((current) => ({ ...current, [field]: value }));
   }
@@ -78,19 +82,8 @@ export function ResumeEditor({
   }
 
   function exportPdf() {
-    const previousTitle = document.title;
-    const pdfTitle = cleanPdfTitle(title);
-
-    document.title = `${pdfTitle}.pdf`;
-
-    const restoreTitle = () => {
-      document.title = previousTitle;
-      window.removeEventListener("afterprint", restoreTitle);
-    };
-
-    window.addEventListener("afterprint", restoreTitle);
+    document.title = cleanPdfTitle(title);
     window.print();
-    window.setTimeout(restoreTitle, 1000);
   }
 
   return (
