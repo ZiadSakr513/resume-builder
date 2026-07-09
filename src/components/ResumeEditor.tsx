@@ -1,7 +1,7 @@
 "use client";
 
 import { Download, Plus, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/Button";
 import { ResumePreview } from "@/components/ResumePreview";
 import type { ResumeContent, ResumeSectionItem, ResumeTemplate } from "@/lib/resume";
@@ -51,7 +51,6 @@ export function ResumeEditor({
   const [content, setContent] = useState(initialContent);
   const [activeView, setActiveView] = useState<"editor" | "preview">("editor");
   const [isExporting, setIsExporting] = useState(false);
-  const previewRef = useRef<HTMLDivElement>(null);
 
   const sectionKeys = useMemo<SectionKey[]>(() => ["experience", "projects", "education"], []);
 
@@ -80,57 +79,132 @@ export function ResumeEditor({
   }
 
   async function exportPdf() {
-    if (!previewRef.current || isExporting) {
+    if (isExporting) {
       return;
     }
 
     setIsExporting(true);
 
     try {
-      const [{ default: html2canvas }, { default: jsPDF }] = await Promise.all([
-        import("html2canvas"),
-        import("jspdf"),
-      ]);
-
-      const resume = previewRef.current.querySelector(".print-area") as HTMLElement | null;
-
-      if (!resume) {
-        return;
-      }
-
-      const canvas = await html2canvas(resume, {
-        backgroundColor: "#ffffff",
-        scale: Math.min(window.devicePixelRatio || 1, 2),
-        useCORS: true,
-      });
+      const { default: jsPDF } = await import("jspdf");
+      const pdfTitle = cleanPdfTitle(title);
       const pdf = new jsPDF({ format: "letter", orientation: "portrait", unit: "pt" });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const margin = 24;
-      const imageWidth = pageWidth - margin * 2;
-      const imageHeight = (canvas.height * imageWidth) / canvas.width;
-      const printableHeight = pageHeight - margin * 2;
-      const imageData = canvas.toDataURL("image/png");
-      let remainingHeight = imageHeight;
+      const margin = 54;
+      const maxWidth = pageWidth - margin * 2;
       let y = margin;
 
-      pdf.setProperties({
-        title: cleanPdfTitle(title),
-        creator: "CVForge",
-      });
-      pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight);
-      remainingHeight -= printableHeight;
+      const colors = {
+        accent: template === "modern" ? "#0f766e" : template === "minimal" ? "#78716c" : "#1e3a5f",
+        body: "#1e293b",
+        muted: "#64748b",
+        title: "#020617",
+      };
 
-      while (remainingHeight > 0) {
-        y -= printableHeight;
-        pdf.addPage();
-        pdf.addImage(imageData, "PNG", margin, y, imageWidth, imageHeight);
-        remainingHeight -= printableHeight;
+      const ensureSpace = (height: number) => {
+        if (y + height > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+      };
+
+      const writeWrapped = (text: string, size: number, color: string, gap = 14, width = maxWidth) => {
+        if (!text.trim()) {
+          return;
+        }
+
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(size);
+        pdf.setTextColor(color);
+
+        const lines = pdf.splitTextToSize(text.trim(), width) as string[];
+        ensureSpace(lines.length * gap + 6);
+        pdf.text(lines, margin, y);
+        y += lines.length * gap + 8;
+      };
+
+      const section = (label: string) => {
+        ensureSpace(34);
+        y += 12;
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(10);
+        pdf.setTextColor(colors.accent);
+        pdf.text(label.toUpperCase(), margin, y);
+        y += 8;
+        pdf.setDrawColor(colors.accent);
+        pdf.setLineWidth(0.5);
+        pdf.line(margin, y, pageWidth - margin, y);
+        y += 18;
+      };
+
+      const item = (entry: ResumeSectionItem) => {
+        ensureSpace(70);
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(12);
+        pdf.setTextColor(colors.title);
+        pdf.text(entry.title || "Untitled", margin, y);
+
+        const dates = [entry.start, entry.end].filter(Boolean).join(" - ");
+        if (dates) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          pdf.setTextColor(colors.muted);
+          pdf.text(dates, pageWidth - margin, y, { align: "right" });
+        }
+
+        y += 15;
+        if (entry.subtitle || entry.location) {
+          pdf.setFont("helvetica", "normal");
+          pdf.setFontSize(10);
+          pdf.setTextColor(colors.muted);
+          pdf.text([entry.subtitle, entry.location].filter(Boolean).join(" | "), margin, y);
+          y += 15;
+        }
+
+        writeWrapped(entry.description, 10, colors.body, 13);
+        y += 6;
+      };
+
+      pdf.setProperties({ title: pdfTitle, creator: "CVForge" });
+      pdf.setFont("helvetica", template === "minimal" ? "normal" : "bold");
+      pdf.setFontSize(template === "minimal" ? 30 : 34);
+      pdf.setTextColor(colors.title);
+      pdf.text(content.fullName || "Your Name", margin, y);
+      y += 26;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(15);
+      pdf.setTextColor(colors.accent);
+      pdf.text(content.headline || "Professional headline", margin, y);
+      y += 28;
+
+      const contact = [content.email, content.phone, content.location, content.website].filter(Boolean).join("  |  ");
+      writeWrapped(contact, 10, colors.muted, 13);
+
+      section("Profile");
+      writeWrapped(content.summary, 10, colors.body, 14);
+
+      section("Skills");
+      writeWrapped(content.skills.split(",").map((skill) => skill.trim()).filter(Boolean).join("  |  "), 10, colors.body, 14);
+
+      if (content.links.length) {
+        section("Links");
+        content.links.forEach((link) => writeWrapped(`${link.label}: ${link.url}`, 10, colors.body, 14));
       }
 
-      pdf.save(`${cleanPdfTitle(title)}.pdf`);
+      section("Experience");
+      content.experience.forEach(item);
+
+      section("Projects");
+      content.projects.forEach(item);
+
+      section("Education");
+      content.education.forEach(item);
+
+      pdf.save(`${pdfTitle}.pdf`);
     } finally {
-      setIsExporting(false);
+      window.setTimeout(() => setIsExporting(false), 500);
     }
   }
 
@@ -149,7 +223,7 @@ export function ResumeEditor({
             </Button>
             <Button disabled={isExporting} onClick={exportPdf} variant="secondary">
               <Download size={16} />
-              {isExporting ? "Making PDF" : "PDF"}
+              {isExporting ? "Downloading" : "PDF"}
             </Button>
           </div>
           <p className="w-full text-right text-sm font-medium text-slate-500">
@@ -270,7 +344,7 @@ export function ResumeEditor({
           ))}
         </section>
 
-        <section className={cn("print-preview", activeView === "editor" && "hidden md:block")} ref={previewRef}>
+        <section className={cn("print-preview", activeView === "editor" && "hidden md:block")}>
           <ResumePreview content={content} template={template} />
         </section>
       </main>
